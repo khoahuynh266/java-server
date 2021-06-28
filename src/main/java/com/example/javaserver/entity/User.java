@@ -1,6 +1,8 @@
 package com.example.javaserver.entity;
 
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import javax.persistence.*;
 import java.io.Serializable;
@@ -11,9 +13,11 @@ import java.util.Set;
 @Entity //xác định lớp hiện tại là một entity.
 @Table(name = "user") // xác định tên bảng ánh xạ sang.
 @Data
+@Getter
+@Setter
 @SecondaryTables({
         @SecondaryTable(name = "role", pkJoinColumns = @PrimaryKeyJoinColumn(name = "idrole")),
-        @SecondaryTable(name="department", pkJoinColumns= @PrimaryKeyJoinColumn(name="iddepartment"))
+        @SecondaryTable(name = "department", pkJoinColumns = @PrimaryKeyJoinColumn(name = "iddepartment"))
 })
 public class User implements Serializable {
     private static final long serialVersionUID = -297553281792804396L;
@@ -28,8 +32,6 @@ public class User implements Serializable {
     @Column
     private String fullname;
     @Column
-    private int idrole;
-    @Column
     private String phone;
     @Column
     private String sex;
@@ -41,25 +43,42 @@ public class User implements Serializable {
     private String avatar;
     @Column
     private String birthday;
+    @Column
+    private boolean active;
+    @Column
+    private String resetPasswordToken;
+    @Column
+    private String Address;
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
 
     @Column(name = "departmentname", table = "department")
     private String departmentname;
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(	name = "user_role",
+    @JoinTable(name = "user_role",
             joinColumns = @JoinColumn(name = "id")
-            ,inverseJoinColumns = @JoinColumn(name = "idrole")
+            , inverseJoinColumns = @JoinColumn(name = "idrole")
     )
     private Set<Role> roles = new HashSet<>();
+
     public User() {
     }
-//
+
+    //
     public User(String username, String fullname, String password) {
         this.username = username;
         this.fullname = fullname;
         this.password = password;
-        this.idsalary ="1";
-
+        this.idsalary = "1";
+        this.active = true;
     }
 
     public int getId() {
@@ -94,4 +113,5 @@ public class User implements Serializable {
     public void setRoles(Set<Role> roles) {
         this.roles = roles;
     }
+
 }
