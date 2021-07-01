@@ -4,14 +4,14 @@ import com.example.javaserver.entity.*;
 import com.example.javaserver.model.dto.UserDTO;
 import com.example.javaserver.payload.request.ChangePasswordRequest;
 import com.example.javaserver.payload.response.MessageResponse;
-import com.example.javaserver.respository.ConfirmationTokenRepository;
 import com.example.javaserver.respository.DepartmentRepository;
+import com.example.javaserver.respository.PasswordResetTokenRepository;
 import com.example.javaserver.respository.RoleRepository;
 import com.example.javaserver.respository.UserRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -22,14 +22,12 @@ public class UserServiceIml implements UserService {
     @Autowired
     UserRepository userRepository;
     @Autowired
-    ConfirmationTokenRepository confirmationTokenRepository;
-    @Autowired
     DepartmentRepository departmentRepository;
-
     @Autowired
     RoleRepository roleRepository;
 
-
+    @Autowired
+    PasswordResetTokenRepository passwordTokenRepository;
     @Autowired
     private ModelMapper modelMapper;
     @Autowired
@@ -71,6 +69,38 @@ public class UserServiceIml implements UserService {
                 user.setPassword(encoder.encode(user.getPassword()));
                 result = modelMapper.map(userRepository.save(user), UserDTO.class);
                 // xet role
+                Set<Role> roles = user.getRoles();
+
+                System.out.println(roles);
+                if (roles == null) {
+                    Role userRole = roleRepository.findByRolename(ERole.ROLE_USER)
+                            .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+                    roles.add(userRole);
+                } else {
+                    roles.forEach(role -> {
+                        switch (role.getName()) {
+                            case ROLE_ADMIN:
+                                Role adminRole = roleRepository.findByRolename(ERole.ROLE_ADMIN)
+                                        .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+                                roles.add(adminRole);
+
+                                break;
+                            case ROLE_MOD:
+                                Role modRole = roleRepository.findByRolename(ERole.ROLE_MOD)
+                                        .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+                                roles.add(modRole);
+
+                                break;
+                            default:
+                                Role userRole = roleRepository.findByRolename(ERole.ROLE_USER)
+                                        .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+                                roles.add(userRole);
+                        }
+                    });
+                }
+
+                user.setRoles(roles);
+                userRepository.save(user);
             } else result = null;
         } catch (Exception e) {
             throw e;
@@ -149,10 +179,10 @@ public class UserServiceIml implements UserService {
                     roles.add(userRole);
                 } else {
 
-                            Role userRole = roleRepository.findByRolename(strRoles)
-                                    .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-                            roles.add(userRole);
-                    }
+                    Role userRole = roleRepository.findByRolename(strRoles)
+                            .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+                    roles.add(userRole);
+                }
                 System.out.println(roles);
                 userUpdate.setRoles(roles);
                 System.out.println(userUpdate.getRoles());
@@ -167,9 +197,7 @@ public class UserServiceIml implements UserService {
     @Override
     public ResponseEntity<?> changePassword(ChangePasswordRequest changePasswordRequest, int id) {
         if (!userRepository.existsById(id)) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse("Error: username done exists!"));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: username done exists!"));
         } else {
             User userdb = userRepository.findUserById(id);// Create new user's account
             if (encoder.matches(changePasswordRequest.getOldPassword(), userdb.getPassword())) {
@@ -201,6 +229,8 @@ public class UserServiceIml implements UserService {
     public ResponseEntity<?> deleteUser(int id) {
 
         try {
+            User user = userRepository.findUserById(id);
+            passwordTokenRepository.deleteByUser(user);
             userRepository.deleteById(id);
             return ResponseEntity.ok("User is deleted");
         } catch (Exception e) {
@@ -221,41 +251,92 @@ public class UserServiceIml implements UserService {
         return roles;
     }
 
-    public void updateResetPasswordToken(String token, String email) throws UsernameNotFoundException {
-        User user = userRepository.findUserByUsername(email);
-        if (user != null) {
-            user.setResetPasswordToken(token);
-            userRepository.save(user);
-        } else {
-            throw new UsernameNotFoundException("Could not find any user with the email " + email);
-        }
-    }
+//    public void updateResetPasswordToken(String token, String email) throws UsernameNotFoundException {
+//        User user = userRepository.findUserByUsername(email);
+//        if (user != null) {
+//            user.setResetPasswordToken(token);
+//            userRepository.save(user);
+//        } else {
+//            throw new UsernameNotFoundException("Could not find any user with the email " + email);
+//        }
+//    }
+//
+//    public User getByResetPasswordToken(String token) {
+//        return userRepository.findByResetPasswordToken(token);
+//    }
+//
+//    public void updatePassword(User user, String newPassword) {
+//
+//            System.out.println("new pass: " + newPassword);
+//            user.setPassword(encoder.encode(newPassword));
+//            userRepository.save(user);
+//
+//        user.setResetPasswordToken(null);
+//        userRepository.save(user);
+//    }
 
-    public User getByResetPasswordToken(String token) {
-        return userRepository.findByResetPasswordToken(token);
-    }
 
-    public void updatePassword(User user, String newPassword) {
-
-            System.out.println("new pass: " + newPassword);
-            user.setPassword(encoder.encode(newPassword));
-            userRepository.save(user);
-
-        user.setResetPasswordToken(null);
-        userRepository.save(user);
-    }
-
-    public ConfirmationToken findByConfirmationToken(String token) {
-        return confirmationTokenRepository.findByConfirmationToken(token);
-    }
     public boolean changePassword(String email, String password) {
         User user = userRepository.findUserByUsername(email);
         user.setPassword(encoder.encode(password));
-        if(userRepository.save(user) != null) {
+        if (userRepository.save(user) != null) {
             return true;
         }
         return false;
     }
+
+    @Override
+    public User getByResetPasswordToken(String token) {
+
+        return userRepository.findByResetPasswordToken(token);
+    }
+
+
+    @Override
+    public void createPasswordResetTokenForUser(final User user, final String token) {
+        final PasswordResetToken myToken = new PasswordResetToken(token, user);
+        passwordTokenRepository.save(myToken);
+    }
+
+    @Override
+    public String validatePasswordResetToken(String token) {
+        final PasswordResetToken passToken = passwordTokenRepository.findByToken(token);
+
+        return !isTokenFound(passToken) ? "invalidToken"
+                : isTokenExpired(passToken) ? "expired"
+                : null;
+    }
+
+    private boolean isTokenFound(PasswordResetToken passToken) {
+        return passToken != null;
+    }
+
+    private boolean isTokenExpired(PasswordResetToken passToken) {
+        final Calendar cal = Calendar.getInstance();
+        return passToken.getExpiryDate().before(cal.getTime());
+    }
+
+    @Override
+    public Optional<User> getUserByPasswordResetToken(final String token) {
+        return Optional.ofNullable(passwordTokenRepository.findByToken(token).getUser());
+    }
+
+    @Override
+    public void changeUserPassword(final User user, final String password) {
+        user.setPassword(encoder.encode(password));
+        userRepository.save(user);
+    }
+
+    @Override
+    public ResponseEntity<?> adminUpdatePassword(ChangePasswordRequest changePasswordRequest, int id) {
+        if (!userRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: username done exists!"));
+        } else {
+            User userdb = userRepository.findUserById(id);// Create new user's account
+            System.out.println("new pass: " + changePasswordRequest.getNewPassword());
+            userdb.setPassword(encoder.encode(changePasswordRequest.getNewPassword()));
+            userRepository.save(userdb);
+            return ResponseEntity.ok(new MessageResponse("User updated password successfully!"));
+        }
+    }
 }
-    
-    

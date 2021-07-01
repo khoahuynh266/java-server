@@ -6,6 +6,7 @@ import com.example.javaserver.entity.User;
 import com.example.javaserver.model.dto.UserDTO;
 import com.example.javaserver.payload.request.ChangePasswordRequest;
 import com.example.javaserver.payload.response.MessageResponse;
+import com.example.javaserver.respository.RefreshTokenRepository;
 import net.bytebuddy.utility.RandomString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,7 +105,11 @@ public class UserController {
                                             @PathVariable("id") int id) {
         return userService.changePassword(changePasswordRequest,id);
     }
-
+    @PostMapping("/adminChangePassword/{id}")
+    public ResponseEntity<?> adminUpdatePassword(@Valid @RequestBody ChangePasswordRequest changePasswordRequest,
+                                            @PathVariable("id") int id) {
+        return userService.adminUpdatePassword(changePasswordRequest,id);
+    }
 
 
 }

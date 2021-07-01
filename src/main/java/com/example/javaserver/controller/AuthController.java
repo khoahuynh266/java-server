@@ -5,12 +5,10 @@ import com.example.javaserver.entity.ERole;
 import com.example.javaserver.entity.RefreshToken;
 import com.example.javaserver.entity.Role;
 import com.example.javaserver.entity.User;
-import com.example.javaserver.entity.ConfirmationToken;
 import com.example.javaserver.payload.request.*;
 import com.example.javaserver.payload.response.JwtResponse;
 import com.example.javaserver.payload.response.MessageResponse;
 import com.example.javaserver.payload.response.RefreshTokenResponse;
-import com.example.javaserver.respository.ConfirmationTokenRepository;
 import com.example.javaserver.respository.RoleRepository;
 import com.example.javaserver.respository.UserRepository;
 import com.example.javaserver.security.jwt.JwtUtils;
@@ -20,7 +18,9 @@ import com.example.javaserver.service.EmailSenderService;
 import com.example.javaserver.service.RefreshTokenService;
 import com.example.javaserver.service.UserDetailsImpl;
 import com.example.javaserver.service.UserService;
+import javassist.NotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -29,11 +29,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import javax.mail.MessagingException;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
-import java.util.Calendar;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.io.UnsupportedEncodingException;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -56,8 +56,6 @@ public class AuthController {
     @Autowired
     RefreshTokenService refreshTokenService;
 
-    @Autowired
-    ConfirmationTokenRepository confirmationTokenRepository;
 
     @Autowired
     PasswordEncoder encoder;
@@ -68,7 +66,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         System.out.println(loginRequest.getPassword() + "_" + loginRequest.getUsername());
-
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 //        System.out.println("login:" + loginRequest.getPassword());
@@ -95,6 +92,7 @@ public class AuthController {
         }
     }
 
+
     @PostMapping("/refreshToken")
     public ResponseEntity<?> refreshtoken(@Valid @RequestBody RefreshTokenRequest request) {
         String requestRefreshToken = request.getRefreshToken();
@@ -116,7 +114,7 @@ public class AuthController {
         return ResponseEntity.ok(new MessageResponse("Log out successful!"));
     }
 
-//    @PostMapping("/changePassword/{id}")
+    //    @PostMapping("/changePassword/{id}")
 //    public ResponseEntity<?> updatePassword(@Valid @RequestBody ChangePasswordRequest changePasswordRequest,
 //                                            @PathVariable("id") int id) {
 //        if (!userRepository.existsById(id)) {
@@ -145,7 +143,8 @@ public class AuthController {
         // Create new user's account
         User user = new User(signUpRequest.getUsername(),
                 signUpRequest.getFullname(),
-                encoder.encode(signUpRequest.getPassword()));
+                encoder.encode(signUpRequest.getPassword()),
+                signUpRequest.getPhone());
 
         // xet role
         Set<String> strRoles = signUpRequest.getRole();
@@ -184,53 +183,78 @@ public class AuthController {
         return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
 
-    @PostMapping("/forgot_password")
-    public ResponseEntity<?> sendVerificationMail(@Valid @RequestBody
-                                                          LoginRequest emailRequest) {
-        if(userRepository.existsByUsername(emailRequest.getUsername())){
-                User user = userRepository.findUserByUsername(emailRequest.getUsername());
-                ConfirmationToken token =   new ConfirmationToken(user);
-                 confirmationTokenRepository.save(token);
-                emailSenderService.sendMail(user.getUsername(), token.getConfirmationToken());
-                return ResponseEntity.ok(new MessageResponse("Verification link is sent on your mail id"));
-            }
-        else {
-            throw new BadRequestException("Email is not associated with any account");
-
-            }
-
-}
-    @GetMapping("confirm-account")
-    public ResponseEntity<?> getMethodName(@RequestParam("token") String token) {
-
-        ConfirmationToken confirmationToken = userService.findByConfirmationToken(token);
-
-        if (confirmationToken == null) {
-            throw new BadRequestException("Invalid token");
+    @PostMapping("/forgotPassword")
+    public ResponseEntity<?> sendVerificationMail(final HttpServletRequest request, @Valid @RequestBody
+            LoginRequest emailRequest) throws MessagingException, UnsupportedEncodingException {
+        if (userRepository.existsByUsername(emailRequest.getUsername())) {
+            User user = userRepository.findUserByUsername(emailRequest.getUsername());
+            String token = UUID.randomUUID().toString();
+            userService.createPasswordResetTokenForUser(user, token);
+            emailSenderService.sendMail(getAppUrl(request), user.getUsername(), token);
+            return ResponseEntity.ok(new MessageResponse("Verification link is sent on your mail id"));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Email is not associated with any account"));
         }
 
-        User user = confirmationToken.getUser();
-        Calendar calendar = Calendar.getInstance();
-
-        if((confirmationToken.getExpiryDate().getTime() -
-                calendar.getTime().getTime()) <= 0) {
-            return ResponseEntity.badRequest().body("Link expired. Generate new link from http://localhost:4200/login");
-        }
-
-        user.setEmailVerified(true);
-        userRepository.save(user);
-        return ResponseEntity.ok("Account verified successfully!");
     }
-    @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@Valid @RequestBody LoginRequest loginRequest) {
-        if(userRepository.existsByUsername(loginRequest.getUsername())){
-            if(userService.changePassword(loginRequest.getUsername(), loginRequest.getPassword())) {
-                return ResponseEntity.ok(new MessageResponse("Password changed successfully"));
+
+    private String getAppUrl(HttpServletRequest request) {
+        return "http://" + request.getServerName() + ":" + request.getServerPort() + request.getContextPath();
+    }
+
+    //    @GetMapping("confirm-account")
+//    public ResponseEntity<?> getMethodName(@RequestParam("token") String token) {
+//
+//        User user = userService.getByResetPasswordToken(token);
+//
+//        if (user == null) {
+//            throw new BadRequestException("Invalid token");
+//        }
+//
+//        Calendar calendar = Calendar.getInstance();
+//
+//        if((user.getExpiryDate().getTime() -
+//                calendar.getTime().getTime()) <= 0) {
+//            return ResponseEntity.badRequest().body("Link expired. Generate new link from http://localhost:4200/login");
+//        }
+//
+//        userRepository.save(user);
+//        return ResponseEntity.ok("Account verified successfully!");
+//    }
+    @PostMapping("/vertifyResetToken")
+    public ResponseEntity<?> vertifyResetToken(@Valid @RequestBody
+                                                       String resetToken) {
+        String result = userService.validatePasswordResetToken(resetToken);
+        if (result != null) {
+            if (result == "invalidToken") {
+                return ResponseEntity.badRequest().body(new MessageResponse("Token is not found"));
             } else {
-                throw new BadRequestException("Unable to change password. Try again!");
+                return ResponseEntity.badRequest().body(new MessageResponse("Token is expired"));
             }
         } else {
-            throw new BadRequestException("User not found with this email id");
+            return ResponseEntity.ok(new MessageResponse("token: is vertify"));
         }
     }
+
+    @PostMapping("/newPassword")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ChangePasswordRequest changePassword) {
+
+        Optional<User> user = userService.getUserByPasswordResetToken(changePassword.getToken());
+        if (user.isPresent()) {
+            userService.changeUserPassword(user.get(), changePassword.getNewPassword());
+            return ResponseEntity.ok(new MessageResponse("Reset password succesfully"));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Can not find user"));
+        }
+    }
+//        if(userRepository.existsByUsername(loginRequest.getUsername())){
+//            if(userService.changePassword(loginRequest.getUsername(), loginRequest.getPassword())) {
+//                return ResponseEntity.ok(new MessageResponse("Password changed successfully"));
+//            } else {
+//                throw new BadRequestException("Unable to change password. Try again!");
+//            }
+//        } else {
+//            throw new BadRequestException("User not found with this email id");
+//        }
 }
+

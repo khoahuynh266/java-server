@@ -1,4 +1,5 @@
 package com.example.javaserver.service;
+
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.PasswordAuthentication;
@@ -6,14 +7,13 @@ import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,28 +22,59 @@ public class EmailSenderService {
     @Autowired
     private JavaMailSender javaMailSender;
 
-    public void sendMail(String userEmail, String confirmationToken){
-        SimpleMailMessage mailMessage = new SimpleMailMessage();
-        mailMessage.setTo(userEmail);
-        mailMessage.setSubject("Account Activation!");
-        mailMessage.setText("To confirm your account, please click here : "
-                +"http://localhost:8080/auth/confirm-account?token="+ confirmationToken
-                + "   Note: This link will expire after 10 minutes.");
-        javaMailSender.send(mailMessage);
-    }
+//    public void sendMail(final String contextPath, String userEmail, String confirmationToken) {
+//        SimpleMailMessage mailMessage = new SimpleMailMessage();
+//        final String url = "http://localhost:4200/resetPassword?token=" + confirmationToken;
+//        mailMessage.setTo(userEmail);
+//        mailMessage.setSubject("Account Activation!");
+//        String content = "<p>Hello,</p>"
+//                + "<p>You have requested to reset your password.</p>"
+//                + "<p>Click the link below to change your password:</p>"
+//                + "<p><a href=\"" + url + "\">Change my password</a></p>"
+//                + "<br>"
+//                + "<p>Ignore this email if you do remember your password, "
+//                + "or you have not made the request.</p>";
+//
+//        mailMessage.setText(content);
+//        javaMailSender.send(mailMessage);
+//    }
 
-    public boolean sendSimpleMail(String to, String sub, String body){
+    public void sendMail(final String contextPath, String userEmail ,String confirmationToken )
+            throws MessagingException, UnsupportedEncodingException {
+        MimeMessage message = javaMailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message);
+        final String url = "http://localhost:4200/resetPassword?token=" + confirmationToken;
+
+        helper.setFrom( "ukishama@gmail.com","Server demo");
+        helper.setTo(userEmail);
+
+        String subject = "Here's the link to reset your password";
+
+        String content = "<p>Hello,</p>"
+                + "<p>You have requested to reset your password.</p>"
+                + "<p>Click the link below to change your password:</p>"
+                + "<p><a href=\"" + url + "\">Change my password</a></p>"
+                + "<br>"
+                + "<p>Ignore this email if you do remember your password, "
+                + "or you have not made the request.</p>";
+
+        helper.setSubject(subject);
+
+        helper.setText(content, true);
+
+        javaMailSender.send(message);
+    }
+    public boolean sendSimpleMail(String to, String sub, String body) {
         SimpleMailMessage mailMessage = new SimpleMailMessage();
         mailMessage.setTo(to);
         mailMessage.setSubject(sub);
         mailMessage.setText(body);
         Boolean isSent = false;
-        try
-        {
+        try {
             javaMailSender.send(mailMessage);
             isSent = true;
+        } catch (Exception e) {
         }
-        catch (Exception e) {}
 
         return isSent;
     }
