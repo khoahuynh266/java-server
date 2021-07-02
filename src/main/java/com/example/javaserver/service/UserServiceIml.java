@@ -229,8 +229,9 @@ public class UserServiceIml implements UserService {
     public ResponseEntity<?> deleteUser(int id) {
 
         try {
-            User user = userRepository.findUserById(id);
-            passwordTokenRepository.deleteByUser(user);
+//            User user = userRepository.findUserById(id);
+
+//            passwordTokenRepository.delete( passwordTokenRepository.findByUser(user));
             userRepository.deleteById(id);
             return ResponseEntity.ok("User is deleted");
         } catch (Exception e) {
@@ -294,9 +295,16 @@ public class UserServiceIml implements UserService {
 
     @Override
     public void createPasswordResetTokenForUser(final User user, final String token) {
+        PasswordResetToken oldToken = passwordTokenRepository.findByUser(user);
+        if(oldToken!=null){
+            oldToken.updateToken(token);
+      passwordTokenRepository.save(oldToken);
+        }
+        else{
         final PasswordResetToken myToken = new PasswordResetToken(token, user);
+
         passwordTokenRepository.save(myToken);
-    }
+    }}
 
     @Override
     public String validatePasswordResetToken(String token) {

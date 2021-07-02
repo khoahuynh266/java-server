@@ -77,6 +77,7 @@ public class AuthController {
             List<String> roles = userDetails.getAuthorities().stream()
                     .map(item -> item.getAuthority())
                     .collect(Collectors.toList());
+            refreshTokenService.deleteByUserId(userDetails.getId());
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
 //            System.out.println("db: " + userDetails.getPassword());
 //            System.out.println(refreshToken.getToken());

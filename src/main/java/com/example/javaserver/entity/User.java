@@ -71,7 +71,11 @@ public class User implements Serializable {
 
     public User() {
     }
+    @OneToOne(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    PasswordResetToken passwordResetToken;
 
+    @OneToOne(mappedBy = "user",cascade = CascadeType.REMOVE, orphanRemoval = true)
+    RefreshToken refreshToken;
     //
     public User(String username, String fullname, String password, String phone) {
         this.username = username;

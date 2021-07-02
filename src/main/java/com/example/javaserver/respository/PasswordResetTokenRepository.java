@@ -21,6 +21,9 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     Stream<PasswordResetToken> findAllByExpiryDateLessThan(Date now);
 
     @Override
+    void delete(PasswordResetToken entity);
+
+    @Override
     void deleteById(Long aLong);
 
     void deleteByExpiryDateLessThan(Date now);
